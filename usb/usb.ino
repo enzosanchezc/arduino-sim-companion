@@ -1,5 +1,17 @@
 #include "HID-Project.h"
 #define PACKET_SIZE 5
+#define HANDBRAKE_MAX 216
+#define HANDBRAKE_MIN 44
+#define HANDBRAKE_GAMMA 1.63
+#define THROTTLE_MAX 44
+#define THROTTLE_MIN 216
+#define THROTTLE_GAMMA 1.63
+#define BRAKE_MAX 216
+#define BRAKE_MIN 44
+#define BRAKE_GAMMA 1.63
+#define CLUTCH_MAX 216
+#define CLUTCH_MIN 44
+#define CLUTCH_GAMMA 1.63
 //#define DEBUG
 
 // Initialize buffer
@@ -8,6 +20,15 @@ uint8_t index = 0;
 
 // Set H Shifter to neutral
 uint8_t lastHGearState = 0;
+
+// Function to apply gamma correction
+float gammaCorrection(float value, float gamma) {
+  if (value >= 0) {
+    return pow(value, 1 / gamma);
+  } else {
+    return -pow(-value, 1 / gamma);
+  }
+}
 
 void sync() {
   const uint8_t SYNC_SEQ[] = {0xA3, 0x7C, 0xE9};
@@ -64,28 +85,23 @@ void loop() {
     
     #ifdef DEBUG
     Serial.print("H Shifter Gear: ");
-    Serial.println((gearState & 0b00000111));
+    Serial.println((gearState & 7));
     Serial.print("Sequential Gear: ");
-    Serial.print((gearState & 0b00001000));
+    Serial.print((gearState & 8));
     Serial.print(" ");
-    Serial.println((gearState & 0b00010000));
+    Serial.println((gearState & 16));
     #endif
   
     // Update H Gear Shift
-    uint8_t newHGearState = gearState & 0b00000111; // Extract the new gear state
+    uint8_t newHGearState = gearState & 7; // Extract the new gear state
     
     // If the gear has changed
     if (newHGearState != lastHGearState) {
       // If no gear is engaged, release all buttons
-      if (newHGearState == 0) {
-        for (int i = 0; i < 8; i++) {
-          Gamepad.release(i);
-        }
-      } else {
-        // If a previous gear was engaged, release it
-        if (lastHGearState != 0) {
-          Gamepad.release(lastHGearState - 1);
-        }
+      for (int i = 0; i < 8; i++) {
+        Gamepad.release(i);
+      }
+      if (newHGearState != 0) {
         // Engage the new gear (mapping 1 to 0, 2 to 1, ..., 6 to 5)
         Gamepad.press(newHGearState);
       }
@@ -113,25 +129,33 @@ void loop() {
     Serial.print("Handbrake: ");
     Serial.println(buffer[1]);
     #endif
-    Gamepad.xAxis(map(buffer[1], 0, 255, -32768, 32767));
-    // Set Throttle
+    int16_t handbrakeInput = map(constrain(buffer[1], min(HANDBRAKE_MIN, HANDBRAKE_MAX), max(HANDBRAKE_MIN, HANDBRAKE_MAX)), HANDBRAKE_MIN, HANDBRAKE_MAX, -32768, 32767);
+    Gamepad.xAxis(gammaCorrection(handbrakeInput / 32767.0, HANDBRAKE_GAMMA) * 32767);
+
+    // Set Throttle with gamma correction
     #ifdef DEBUG
     Serial.print("Throttle: ");
     Serial.println(buffer[2]);
     #endif
-    Gamepad.yAxis(map(buffer[2], 0, 255, -32768, 32767));
-    // Set Brake
+    int16_t throttleInput = map(constrain(buffer[2], min(THROTTLE_MIN, THROTTLE_MAX), max(THROTTLE_MIN, THROTTLE_MAX)), THROTTLE_MIN, THROTTLE_MAX, -32768, 32767);
+    Gamepad.yAxis(gammaCorrection(throttleInput / 32767.0, THROTTLE_GAMMA) * 32767);
+
+    // Set Brake with gamma correction
     #ifdef DEBUG
     Serial.print("Brake: ");
     Serial.println(buffer[3]);
     #endif
-    Gamepad.rxAxis(map(buffer[3], 0, 255, -32768, 32767));
-    // Set Clutch
+    int16_t brakeInput = map(constrain(buffer[3], min(BRAKE_MIN, BRAKE_MAX), max(BRAKE_MIN, BRAKE_MAX)), BRAKE_MIN, BRAKE_MAX, -32768, 32767);
+    Gamepad.rxAxis(gammaCorrection(brakeInput / 32767.0, BRAKE_GAMMA) * 32767);
+
+    // Set Clutch with gamma correction
     #ifdef DEBUG
     Serial.print("Clutch: ");
     Serial.println(buffer[4]);
     #endif
-    Gamepad.ryAxis(map(buffer[4], 0, 255, -32768, 32767));
+    int16_t clutchInput = map(constrain(buffer[4], min(CLUTCH_MIN, CLUTCH_MAX), max(CLUTCH_MIN, CLUTCH_MAX)), CLUTCH_MIN, CLUTCH_MAX, -32768, 32767);
+    Gamepad.ryAxis(gammaCorrection(clutchInput / 32767.0, CLUTCH_GAMMA) * 32767);
+
     // Send to Gamepad
     Gamepad.write();
   }

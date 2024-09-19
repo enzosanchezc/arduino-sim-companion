@@ -2,19 +2,15 @@
 #define SYNC_TIMEOUT 10000
 //#define DEBUG
 
-#define H_SHIFTER_1 2
-#define H_SHIFTER_2 3
-#define H_SHIFTER_3 4
-#define H_SHIFTER_4 5
-#define H_SHIFTER_5 6
-#define H_SHIFTER_6 7
-#define H_SHIFTER_R 8
-#define SEQ_SHIFTER_UP 9
-#define SEQ_SHIFTER_DOWN 10
+#define SEQ_SHIFTER_UP 3
+#define SEQ_SHIFTER_DOWN 4
 #define HANDBRAKE A0
 #define THROTTLE A1
 #define BRAKE A2
 #define CLUTCH A3
+#define H_SHIFTER_X A4
+#define H_SHIFTER_Y A5
+#define H_SHIFTER_R 2
 
 // Initialize H shifter state
 uint8_t hGearState = 0;
@@ -22,10 +18,11 @@ uint8_t hGearState = 0;
 // Initialize sequential shifter state
 uint8_t seqState[2] = {1, 1};
 // Time since last sequential gear pushed (debouncing)
-int32_t seqLastChange[2] = {0, 0};
+uint32_t seqLastChange[2] = {0, 0};
 
 // Initialize axis states
-uint8_t axisStates[4] = {0, 0, 0, 0}; 
+uint8_t axisStates[4] = {0, 0, 0, 0};
+uint16_t hGearAxes[2] = {0, 0}; 
 
 void sync() {
   const uint8_t SYNC_SEQ[] = {0xA3, 0x7C, 0xE9};
@@ -59,12 +56,6 @@ void setup() {
   Serial.begin(9600);
   
   // Initialize inputs
-  pinMode(H_SHIFTER_1, INPUT_PULLUP);
-  pinMode(H_SHIFTER_2, INPUT_PULLUP);
-  pinMode(H_SHIFTER_3, INPUT_PULLUP);
-  pinMode(H_SHIFTER_4, INPUT_PULLUP);
-  pinMode(H_SHIFTER_5, INPUT_PULLUP);
-  pinMode(H_SHIFTER_6, INPUT_PULLUP);
   pinMode(H_SHIFTER_R, INPUT_PULLUP);
   pinMode(SEQ_SHIFTER_UP, INPUT_PULLUP);
   pinMode(SEQ_SHIFTER_DOWN, INPUT_PULLUP);
@@ -74,12 +65,24 @@ void setup() {
 }
 
 void loop() {
+  // Read H Gear Shift
+  hGearAxes[0] = analogRead(H_SHIFTER_X);
+  hGearAxes[1] = analogRead(H_SHIFTER_Y);
   // Send H Gear Shift and Sequential
   hGearState = 0;
-  for (uint8_t i = 2; i < 9; i++) {
-    if (!digitalRead(i)) {
-      hGearState = i - 1; // Set gear state from 0 to 7
-      break; // Exit loop after finding the first engaged gear
+  // Check reverse
+  if (digitalRead(H_SHIFTER_R) && hGearAxes[0] > 639 && hGearAxes[1] < 256) {
+    hGearState = 7;
+  } else {
+    if (hGearAxes[0] < 385) {
+      if (hGearAxes[1] > 768) hGearState = 1;
+      if (hGearAxes[1] < 256) hGearState = 2;
+    } else if (hGearAxes[0] > 639) {
+      if (hGearAxes[1] > 768) hGearState = 5;
+      if (hGearAxes[1] < 256) hGearState = 6;
+    } else {
+      if (hGearAxes[1] > 768) hGearState = 3;
+      if (hGearAxes[1] < 256) hGearState = 4;
     }
   }
 
